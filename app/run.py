@@ -1,12 +1,8 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from flask import Flask
+from app.models import create_app
 from app.routes import bp
 import os
 
-app = Flask(__name__)
+app = create_app()
 app.register_blueprint(bp, url_prefix="/")
 
 @app.route("/")
