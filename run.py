@@ -1,8 +1,10 @@
-from app.models import create_app
+from flask import Flask
 from app.routes import bp
-import os
+from app.models import init_app  # ⬅️ important
 
-app = create_app()
+app = Flask(__name__)
+app = init_app(app)  # ⬅️ initialize database here
+
 app.register_blueprint(bp, url_prefix="/")
 
 @app.route("/")
@@ -10,5 +12,6 @@ def index():
     return "Tellabook backend is running!"
 
 if __name__ == "__main__":
+    import os
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port)
