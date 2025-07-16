@@ -7,7 +7,7 @@ from app.routes import bp
 import os
 
 app = Flask(__name__)
-app.register_blueprint(bp)
+app.register_blueprint(bp, url_prefix="/")
 
 @app.route("/")
 def index():
