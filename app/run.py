@@ -7,7 +7,8 @@ app.register_blueprint(bp)
 
 @app.route("/")
 def index():
-    return "Tellabook backend is running!"
+    return "Tellabook backend is running properly!"
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
