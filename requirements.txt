@@ -1,4 +1,6 @@
 flask
+Flask-SQLAlchemy
+psycopg2-binary
 openai
 python-dotenv
 pandas
