@@ -1,9 +1,9 @@
 from flask import Flask
 from app.routes import bp
-from app.models import init_app  # ⬅️ important
+from app.models import init_app
 
 app = Flask(__name__)
-app = init_app(app)  # ⬅️ initialize database here
+init_app(app)
 
 app.register_blueprint(bp, url_prefix="/")
 
