@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from flask import Flask
 from app.routes import bp
 import os
@@ -7,8 +11,7 @@ app.register_blueprint(bp)
 
 @app.route("/")
 def index():
-    return "Tellabook backend is running properly!"
-
+    return "Tellabook backend is running!"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
