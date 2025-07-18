@@ -9,10 +9,9 @@ def extract_amount(text):
     return None
 
 def extract_vendor(text):
-    # Very basic logic to grab the word after "for"
     match = re.search(r"\bfor\s+([A-Za-z0-9&.\- ]+)", text, re.IGNORECASE)
     if match:
-        return match.group(1).strip().split()[0]  # Just vendor name
+        return match.group(1).strip().split()[0]
     return "Unknown"
 
 def extract_category(text):
@@ -40,14 +39,21 @@ def extract_category(text):
     return "Uncategorized"
 
 def extract_date(text):
-    dt = parse_date(text, settings={
-        "PREFER_DATES_FROM": "past",
-        "RELATIVE_BASE": datetime.now()
-    })
+    dt = parse_date(text, settings={"PREFER_DATES_FROM": "past"})
     if isinstance(dt, datetime):
         return dt.date().isoformat()
     elif isinstance(dt, date):
         return dt.isoformat()
+
+    # Fallback regex to manually extract month and day
+    date_match = re.search(r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}\b", text, re.IGNORECASE)
+    if date_match:
+        try:
+            fallback_dt = parse_date(date_match.group(0), settings={"PREFER_DATES_FROM": "past"})
+            if fallback_dt:
+                return fallback_dt.date().isoformat()
+        except:
+            return None
     return None
 
 def parse_invoice_command(text):
