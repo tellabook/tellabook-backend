@@ -1,70 +1,45 @@
 import re
 from datetime import datetime
-import dateparser
+from dateparser.search import search_dates
 
-def parse_invoice_command(command):
+
+def parse_invoice(input_text):
     result = {
-        "vendor": None,
         "amount": None,
-        "category": None,
-        "invoice_date": datetime.today().date(),  # Default to today
-        "description": None,
+        "category": "Lease Expense",
+        "description": "",
+        "invoice_date": None,
         "invoice_number": None,
-        "taxes": {
-            "GST": 0.0,
-            "PST": 0.0,
-            "HST": 0.0,
-            "QST": 0.0,
-        }
+        "status": "staged",
+        "taxes": [],
+        "vendor": None
     }
 
-    # Amount
-    amount_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)", command)
+    result["description"] = summarize_description(input_text)
+
+    amount_match = re.search(r"\$([\d,]+\.?\d*)", input_text)
     if amount_match:
         result["amount"] = float(amount_match.group(1).replace(",", ""))
 
-    # Vendor (first capitalized word after "for" or "to")
-    vendor_match = re.search(r"(?:for|to)\s+([A-Z][\w\s&-]{1,40})", command)
-    if vendor_match:
-        result["vendor"] = vendor_match.group(1).strip()
+    invoice_match = re.search(r"invoice number is (\d+)", input_text, re.IGNORECASE)
+    if invoice_match:
+        result["invoice_number"] = invoice_match.group(1)
 
-    # Date
-    date = dateparser.search.search_dates(command)
-    if date:
-        result["invoice_date"] = date[0][1].date()
+    tax_matches = re.findall(r"\$(\d+(?:\.\d{1,2})?)\s+(GST|PST|HST|QST)", input_text, re.IGNORECASE)
+    for value, tax_type in tax_matches:
+        result["taxes"].append({tax_type.upper(): float(value)})
 
-    # Invoice number
-    invoice_no = re.search(r"invoice (?:number\s*)?#?(\d+)", command, re.IGNORECASE)
-    if invoice_no:
-        result["invoice_number"] = invoice_no.group(1)
-
-    # Taxes
-    for tax in ["GST", "PST", "HST", "QST"]:
-        match = re.search(r"\$([\d,]+(?:\.\d{1,2})?)\s*" + tax, command, re.IGNORECASE)
-        if match:
-            result["taxes"][tax] = float(match.group(1).replace(",", ""))
-
-    # Category guess
-    if "lease" in command.lower() or "rent" in command.lower():
-        result["category"] = "Lease Expense"
-    elif "fuel" in command.lower() or "gas" in command.lower():
-        result["category"] = "Fuel"
-    elif "repair" in command.lower():
-        result["category"] = "Repairs"
-    elif "insurance" in command.lower():
-        result["category"] = "Insurance"
-    elif "meal" in command.lower() or "restaurant" in command.lower():
-        result["category"] = "Meals & Entertainment"
+    dates = search_dates(input_text)
+    if dates:
+        result["invoice_date"] = dates[0][1].date().isoformat()
     else:
-        result["category"] = "Uncategorized"
+        result["invoice_date"] = datetime.today().date().isoformat()
 
-    # Description summary
-    result["description"] = summarize_description(command)
+    vendor_match = re.search(r"from ([A-Z][a-z]+ \d{1,2})", input_text)
+    if vendor_match:
+        result["vendor"] = vendor_match.group(1)
 
     return result
 
 def summarize_description(text):
-    text = re.sub(r"\s+", " ", text.strip())
-    if len(text) > 80:
-        return text[:77] + "..."
-    return text
+    return " ".join(text.strip().split()[:7]) + "..."

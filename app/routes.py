@@ -1,101 +1,40 @@
 from flask import Blueprint, request, jsonify
+from app.parser import parse_invoice
 from app.models import db, Invoice, UserCommandHistory
-from app.parser import parse_invoice_command
 
-bp = Blueprint("api", __name__)
-
-@bp.route("/invoices", methods=["POST"])
-def create_invoice():
-    data = request.json
-
-    invoice = Invoice(
-        vendor=data.get("vendor"),
-        amount=data.get("amount"),
-        category=data.get("category"),
-        invoice_date=data.get("invoice_date"),
-        description=data.get("description"),
-        status="staged"
-    )
-
-    db.session.add(invoice)
-    db.session.commit()
-
-    return jsonify({"message": "Invoice staged", "invoice_id": invoice.id}), 201
-
-
-@bp.route("/invoices/staged", methods=["GET"])
-def get_staged_invoices():
-    invoices = Invoice.query.filter_by(status="staged").all()
-
-    results = [{
-        "id": i.id,
-        "vendor": i.vendor,
-        "amount": i.amount,
-        "category": i.category,
-        "invoice_date": i.invoice_date.isoformat() if i.invoice_date else None,
-        "description": i.description,
-        "invoice_number": i.invoice_number,
-        "taxes": i.taxes,
-        "status": i.status
-    } for i in invoices]
-
-    return jsonify(results), 200
-
-
-@bp.route("/invoices/<int:invoice_id>/confirm", methods=["PATCH"])
-def confirm_invoice(invoice_id):
-    invoice = Invoice.query.get(invoice_id)
-
-    if not invoice:
-        return jsonify({"error": "Invoice not found"}), 404
-
-    invoice.status = "confirmed"
-    db.session.commit()
-
-    return jsonify({"message": f"Invoice {invoice_id} confirmed"}), 200
-
-
-@bp.route("/commands/log", methods=["POST"])
-def log_command():
-    data = request.json
-
-    log = UserCommandHistory(
-        input_text=data.get("input_text"),
-        output_summary=data.get("output_summary")
-    )
-
-    db.session.add(log)
-    db.session.commit()
-
-    return jsonify({"message": "Command logged", "id": log.id}), 201
-
+bp = Blueprint("routes", __name__)
 
 @bp.route("/parse-and-stage", methods=["POST"])
 def parse_and_stage():
-    data = request.json
-    command = data.get("input_text")
+    data = request.get_json()
+    input_text = data.get("input_text", "")
 
-    if not command:
-        return jsonify({"error": "Missing input_text"}), 400
+    if not input_text:
+        return jsonify({"error": "No input text provided."}), 400
 
-    parsed = parse_invoice_command(command)
+    parsed_data = parse_invoice(input_text)
 
-    invoice = Invoice(
-        vendor=parsed.get("vendor"),
-        amount=parsed.get("amount"),
-        category=parsed.get("category"),
-        invoice_date=parsed.get("invoice_date"),
-        description=parsed.get("description"),
-        invoice_number=parsed.get("invoice_number"),
-        taxes=parsed.get("taxes"),
-        status="staged"
+    new_invoice = Invoice(
+        amount=parsed_data["amount"],
+        category=parsed_data["category"],
+        invoice_date=parsed_data["invoice_date"],
+        invoice_number=parsed_data["invoice_number"],
+        description=parsed_data["description"],
+        status=parsed_data["status"],
+        vendor=parsed_data["vendor"]
     )
+    db.session.add(new_invoice)
 
-    db.session.add(invoice)
+    command_history = UserCommandHistory(
+        input_text=input_text,
+        output_summary=parsed_data["description"]
+    )
+    db.session.add(command_history)
+
     db.session.commit()
 
     return jsonify({
         "message": "Invoice parsed and staged",
-        "invoice_id": invoice.id,
-        "parsed_data": parsed
+        "invoice_id": new_invoice.id,
+        "parsed_data": parsed_data
     }), 201
