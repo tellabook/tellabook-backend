@@ -1,6 +1,6 @@
 import re
 from dateparser import parse as parse_date
-from datetime import datetime
+from datetime import datetime, date
 
 # Basic keyword maps
 CATEGORY_KEYWORDS = {
@@ -25,24 +25,22 @@ def extract_date(text):
     dt = parse_date(text, settings={"PREFER_DATES_FROM": "past"})
     if dt and isinstance(dt, datetime):
         return dt.date().isoformat()
-    elif isinstance(dt, datetime.date):
+    elif isinstance(dt, date):
         return dt.isoformat()
     return None
 
-
-
 def extract_vendor(text):
-    # Try to find vendor separate from category
-    ignore = ["record", "log", "book", "mark", "put"]
-    words = re.findall(r"\b[A-Z][a-zA-Z0-9]+\b", text)
+    # Look for known vendor keywords first
+    for key in CATEGORY_KEYWORDS.keys():
+        if key.lower() in text.lower():
+            return key.capitalize()
 
-    for word in words:
-        lower = word.lower()
-        if lower not in ignore and lower not in CATEGORY_KEYWORDS:
-            return word
+    # Otherwise, look for the first capitalized word that's not a verb
+    candidates = re.findall(r"\b[A-Z][a-zA-Z0-9]+(?:\s+[A-Z][a-zA-Z0-9]+)?", text)
+    for c in candidates:
+        if c.lower() not in ["record", "log", "book", "mark", "put"]:
+            return c
     return None
-
-
 
 def extract_category(text):
     for key, cat in CATEGORY_KEYWORDS.items():
