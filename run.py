@@ -1,11 +1,11 @@
+import os
 from flask import Flask
 from app.models import db
 from app.routes import bp
-import os
 
 app = Flask(__name__)
 
-# Make sure to set the environment variable DATABASE_URL on Render
+# ✅ Load DATABASE_URL from environment
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
