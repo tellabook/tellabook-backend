@@ -22,12 +22,16 @@ def extract_amount(text):
     return None
 
 def extract_date(text):
-    dt = parse_date(text, settings={"PREFER_DATES_FROM": "past"})
-    if dt and isinstance(dt, datetime):
+    dt = parse_date(text, settings={
+        "PREFER_DATES_FROM": "past",
+        "RELATIVE_BASE": datetime.now()
+    })
+    if isinstance(dt, datetime):
         return dt.date().isoformat()
     elif isinstance(dt, date):
         return dt.isoformat()
     return None
+
 
 def extract_vendor(text):
     # Look for known vendor keywords first
