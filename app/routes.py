@@ -1,7 +1,9 @@
 from flask import Blueprint, request, jsonify
 from app.models import db, Invoice, UserCommandHistory
+from app.parser import parse_invoice  # ✅ Corrected import
 
 bp = Blueprint("api", __name__)
+
 
 # === POST /invoices — Stage a new invoice ===
 @bp.route("/invoices", methods=["POST"])
@@ -70,9 +72,8 @@ def log_command():
 
     return jsonify({"message": "Command logged", "id": log.id}), 201
 
-from app.parser import parse_invoice
 
-# POST /parse-and-stage — natural language invoice logging
+# === POST /parse-and-stage — Parse invoice from user language ===
 @bp.route("/parse-and-stage", methods=["POST"])
 def parse_and_stage():
     data = request.json
@@ -81,7 +82,7 @@ def parse_and_stage():
     if not command:
         return jsonify({"error": "Missing input_text"}), 400
 
-    parsed = parse_invoice_command(command)
+    parsed = parse_invoice(command)  # ✅ FIXED name
 
     invoice = Invoice(
         vendor=parsed.get("vendor"),
@@ -100,4 +101,3 @@ def parse_and_stage():
         "invoice_id": invoice.id,
         "parsed_data": parsed
     }), 201
-
