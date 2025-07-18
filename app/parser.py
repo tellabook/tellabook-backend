@@ -12,12 +12,12 @@ def parse_invoice(text):
     else:
         result["amount"] = 0.0
 
-    # Extract GST and PST or HST/QST if available
+    # Extract GST, PST, HST, QST
     taxes = {}
-    gst_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)\s*GST", text, re.IGNORECASE)
-    pst_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)\s*PST", text, re.IGNORECASE)
-    hst_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)\s*HST", text, re.IGNORECASE)
-    qst_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)\s*QST", text, re.IGNORECASE)
+    gst_match = re.search(r"\$([\d,]+(?:\.\d{1,2})?)\s*GST", text, re.IGNORECASE)
+    pst_match = re.search(r"\$([\d,]+(?:\.\d{1,2})?)\s*PST", text, re.IGNORECASE)
+    hst_match = re.search(r"\$([\d,]+(?:\.\d{1,2})?)\s*HST", text, re.IGNORECASE)
+    qst_match = re.search(r"\$([\d,]+(?:\.\d{1,2})?)\s*QST", text, re.IGNORECASE)
 
     if gst_match:
         taxes["GST"] = float(gst_match.group(1).replace(",", ""))
@@ -31,7 +31,7 @@ def parse_invoice(text):
     if taxes:
         result["taxes"] = taxes
 
-    # Extract date using dateparser
+    # Extract date
     date = dateparser.search.search_dates(text)
     if date:
         result["invoice_date"] = date[0][1].date().isoformat()
@@ -43,7 +43,7 @@ def parse_invoice(text):
     if invoice_number_match:
         result["invoice_number"] = invoice_number_match.group(1)
 
-    # Heuristic category
+    # Category
     if "lease" in text.lower():
         result["category"] = "Lease Expense"
     elif "truck" in text.lower():
@@ -55,14 +55,14 @@ def parse_invoice(text):
     else:
         result["category"] = "General Expense"
 
-    # Vendor = month name or placeholder
+    # Vendor from month name or fallback
     months = [
         "january", "february", "march", "april", "may", "june",
         "july", "august", "september", "october", "november", "december"
     ]
     result["vendor"] = next((m.capitalize() for m in months if m in text.lower()), "Unknown Vendor")
 
-    # Description is a clean summary, not verbatim
+    # Description
     result["description"] = f"{result['category']} for {result['vendor']}"
 
     return result
