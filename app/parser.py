@@ -1,86 +1,57 @@
 import re
-from datetime import date
-from dateparser.search import search_dates
+from datetime import datetime
+import dateparser
 
-# === CATEGORY & VENDOR HINTS ===
-CATEGORY_KEYWORDS = {
-    "Internet": ["telus", "shaw", "rogers", "internet"],
-    "Phone": ["bell", "fido", "rogers", "phone", "mobility"],
-    "Insurance": ["insurance", "aviva", "intact", "policy"],
-    "Fuel": ["fuel", "gas", "diesel", "petro", "esso", "shell"],
-    "Lease Expense": ["lease", "leasing", "rent"],
-    "Office Supplies": ["staples", "office", "supplies", "stationery"],
-    "Meals & Entertainment": ["restaurant", "meal", "dinner", "lunch", "coffee", "entertainment"],
-    "Software": ["microsoft", "adobe", "software", "saas", "subscription", "quickbooks"],
-    "Repairs & Maintenance": ["repair", "maintenance", "service", "fix"],
-    "Professional Fees": ["lawyer", "accountant", "consulting", "bookkeeping", "legal"],
-    "Advertising": ["marketing", "ad", "advertising", "promotion"],
-    "Bank Charges": ["bank", "interest", "charge", "fee"],
-    "Travel": ["flight", "hotel", "uber", "airbnb", "taxi", "car rental"]
-}
+def parse_invoice_command(command: str) -> dict:
+    # === Extract amount ===
+    amount_match = re.search(r'\$?([\d,]+\.?\d*)', command)
+    amount = float(amount_match.group(1).replace(',', '')) if amount_match else 0.0
 
-def infer_category(text):
-    text_lower = text.lower()
-    for category, keywords in CATEGORY_KEYWORDS.items():
-        if any(keyword in text_lower for keyword in keywords):
-            return category
-    return "Uncategorized"
+    # === Extract vendor (guess: first proper noun after 'for') ===
+    vendor_match = re.search(r'for ([\w\s&\-]+?)( from| on| as| starting| due|\,|\.)', command, re.IGNORECASE)
+    vendor = vendor_match.group(1).strip() if vendor_match else "Unknown Vendor"
 
-def extract_vendor(text):
-    words = re.findall(r'\b[A-Z][a-zA-Z]+\b', text)
-    common_exclude = {"Record", "Invoice", "Amount", "From", "For", "The", "And"}
-    for word in words:
-        if word not in common_exclude:
-            return word
-    return "Unknown"
+    # === Extract category based on keyword hints ===
+    category = "General Expense"
+    lower_command = command.lower()
+    if "lease" in lower_command:
+        category = "Lease Expense"
+    elif "truck lease" in lower_command:
+        category = "Truck Lease payment"
+    elif "rent" in lower_command:
+        category = "Rent"
+    elif "software" in lower_command:
+        category = "Software Subscription"
+    elif "office" in lower_command:
+        category = "Office Expense"
 
-def extract_amount(text):
-    match = re.search(r"\$?([0-9,]+\.?\d{0,2})", text)
-    if match:
-        return float(match.group(1).replace(",", ""))
-    return 0.0
-
-def extract_invoice_number(text):
-    match = re.search(r"invoice number is (\d+)", text.lower())
-    return match.group(1) if match else None
-
-def extract_taxes(text):
+    # === Extract taxes ===
     taxes = {}
-    for tax in ["GST", "PST", "HST", "QST"]:
-        match = re.search(rf"\$?([0-9,]+\.?\d{{0,2}})\s*{tax}", text, re.IGNORECASE)
-        if match:
-            amount = float(match.group(1).replace(",", ""))
-            taxes[tax.upper()] = amount
-    return taxes if taxes else None
+    tax_matches = re.findall(r'\$([\d\.]+)\s*(GST|PST|HST|QST)', command, re.IGNORECASE)
+    for amount_str, tax_type in tax_matches:
+        taxes[tax_type.upper()] = float(amount_str)
 
-def extract_date(text):
-    found = search_dates(text, settings={"PREFER_DATES_FROM": "past"})
-    if found:
-        # Return the first matched date
-        return found[0][1].date().isoformat()
-    return date.today().isoformat()
+    # === Extract invoice number if present ===
+    invoice_number_match = re.search(r'invoice number is (\d+)', command, re.IGNORECASE)
+    invoice_number = invoice_number_match.group(1) if invoice_number_match else None
 
-def summarize_description(text):
-    summary = text.lower()
-    if "lease" in summary and "truck" in summary:
-        return "Truck lease payment"
-    elif "internet" in summary:
-        return "Internet bill"
-    elif "insurance" in summary:
-        return "Insurance expense"
-    elif "gst" in summary or "pst" in summary:
-        return "Expense with sales taxes"
-    return "Business expense"
+    # === Extract date from text ===
+    parsed_date = dateparser.search.search_dates(command)
+    invoice_date = None
+    if parsed_date:
+        invoice_date = parsed_date[0][1].date().isoformat()
+    else:
+        invoice_date = datetime.today().date().isoformat()  # fallback to today
 
-# === MAIN PARSER FUNCTION ===
-def parse_invoice_command(text):
+    # === Description (summarized) ===
+    description = f"{category}"
+
     return {
-        "amount": extract_amount(text),
-        "category": infer_category(text),
-        "vendor": extract_vendor(text),
-        "invoice_date": extract_date(text),
-        "invoice_number": extract_invoice_number(text),
-        "description": summarize_description(text),
-        "taxes": extract_taxes(text),
-        "status": "staged"
+        "vendor": vendor,
+        "amount": amount,
+        "category": category,
+        "invoice_date": invoice_date,
+        "description": description,
+        "taxes": taxes,
+        "invoice_number": invoice_number
     }
