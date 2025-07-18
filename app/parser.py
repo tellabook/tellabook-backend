@@ -1,25 +1,43 @@
 import re
-from dateparser import parse as parse_date
 from datetime import datetime, date
-
-# Basic keyword maps
-CATEGORY_KEYWORDS = {
-    "lease": "Lease Expense",
-    "rent": "Rent",
-    "internet": "Internet",
-    "phone": "Telecom",
-    "telus": "Telecom",
-    "rogers": "Telecom",
-    "office": "Office Supplies",
-    "printer": "Office Supplies",
-    "utilities": "Utilities"
-}
+from dateparser import parse as parse_date
 
 def extract_amount(text):
-    match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)", text)
+    match = re.search(r"\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+)", text)
     if match:
         return float(match.group(1).replace(",", ""))
     return None
+
+def extract_vendor(text):
+    # Very basic logic to grab the word after "for"
+    match = re.search(r"\bfor\s+([A-Za-z0-9&.\- ]+)", text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().split()[0]  # Just vendor name
+    return "Unknown"
+
+def extract_category(text):
+    categories = {
+        "internet": "Internet",
+        "telus": "Internet",
+        "rogers": "Internet",
+        "lease": "Lease/Rent",
+        "rent": "Lease/Rent",
+        "payroll": "Payroll",
+        "salary": "Payroll",
+        "equipment": "Equipment",
+        "truck": "Equipment",
+        "repairs": "Repairs & Maintenance",
+        "fuel": "Fuel",
+        "insurance": "Insurance",
+        "legal": "Legal Fees",
+        "accounting": "Accounting Fees",
+        "advertising": "Advertising"
+    }
+    text_lower = text.lower()
+    for keyword, category in categories.items():
+        if keyword in text_lower:
+            return category
+    return "Uncategorized"
 
 def extract_date(text):
     dt = parse_date(text, settings={
@@ -30,26 +48,6 @@ def extract_date(text):
         return dt.date().isoformat()
     elif isinstance(dt, date):
         return dt.isoformat()
-    return None
-
-
-def extract_vendor(text):
-    # Look for known vendor keywords first
-    for key in CATEGORY_KEYWORDS.keys():
-        if key.lower() in text.lower():
-            return key.capitalize()
-
-    # Otherwise, look for the first capitalized word that's not a verb
-    candidates = re.findall(r"\b[A-Z][a-zA-Z0-9]+(?:\s+[A-Z][a-zA-Z0-9]+)?", text)
-    for c in candidates:
-        if c.lower() not in ["record", "log", "book", "mark", "put"]:
-            return c
-    return None
-
-def extract_category(text):
-    for key, cat in CATEGORY_KEYWORDS.items():
-        if key in text.lower():
-            return cat
     return None
 
 def parse_invoice_command(text):
