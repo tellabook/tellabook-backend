@@ -1,57 +1,67 @@
+# === parser.py ===
 import re
 from datetime import datetime
-import dateparser
+from dateparser.search import search_dates
 
 def parse_invoice_command(command: str) -> dict:
-    # === Extract amount ===
-    amount_match = re.search(r'\$?([\d,]+\.?\d*)', command)
-    amount = float(amount_match.group(1).replace(',', '')) if amount_match else 0.0
-
-    # === Extract vendor (guess: first proper noun after 'for') ===
-    vendor_match = re.search(r'for ([\w\s&\-]+?)( from| on| as| starting| due|\,|\.)', command, re.IGNORECASE)
-    vendor = vendor_match.group(1).strip() if vendor_match else "Unknown Vendor"
-
-    # === Extract category based on keyword hints ===
-    category = "General Expense"
-    lower_command = command.lower()
-    if "lease" in lower_command:
-        category = "Lease Expense"
-    elif "truck lease" in lower_command:
-        category = "Truck Lease payment"
-    elif "rent" in lower_command:
-        category = "Rent"
-    elif "software" in lower_command:
-        category = "Software Subscription"
-    elif "office" in lower_command:
-        category = "Office Expense"
-
-    # === Extract taxes ===
-    taxes = {}
-    tax_matches = re.findall(r'\$([\d\.]+)\s*(GST|PST|HST|QST)', command, re.IGNORECASE)
-    for amount_str, tax_type in tax_matches:
-        taxes[tax_type.upper()] = float(amount_str)
-
-    # === Extract invoice number if present ===
-    invoice_number_match = re.search(r'invoice number is (\d+)', command, re.IGNORECASE)
-    invoice_number = invoice_number_match.group(1) if invoice_number_match else None
-
-    # === Extract date from text ===
-    parsed_date = dateparser.search.search_dates(command)
-    invoice_date = None
-    if parsed_date:
-        invoice_date = parsed_date[0][1].date().isoformat()
-    else:
-        invoice_date = datetime.today().date().isoformat()  # fallback to today
-
-    # === Description (summarized) ===
-    description = f"{category}"
-
-    return {
-        "vendor": vendor,
-        "amount": amount,
-        "category": category,
-        "invoice_date": invoice_date,
-        "description": description,
-        "taxes": taxes,
-        "invoice_number": invoice_number
+    result = {
+        "amount": None,
+        "category": None,
+        "invoice_date": None,
+        "invoice_number": None,
+        "description": None,
+        "vendor": None,
+        "taxes": {},
     }
+
+    # Amount
+    amount_match = re.search(r"\$?([\d,]+\.\d{2}|\d+)", command)
+    if amount_match:
+        result["amount"] = float(amount_match.group(1).replace(",", ""))
+
+    # Category inference
+    if "lease" in command.lower() and "truck" in command.lower():
+        result["category"] = "Truck lease payment"
+    elif "lease" in command.lower():
+        result["category"] = "Lease Expense"
+    elif "rent" in command.lower():
+        result["category"] = "Rent Expense"
+    elif "software" in command.lower():
+        result["category"] = "Software"
+    elif "consulting" in command.lower():
+        result["category"] = "Consulting Expense"
+    else:
+        result["category"] = "General Expense"
+
+    # Taxes (GST, PST, HST, QST)
+    tax_types = ["GST", "PST", "HST", "QST"]
+    for tax in tax_types:
+        tax_match = re.search(rf"\$([\d\.]+)\s*{tax}", command, re.IGNORECASE)
+        if tax_match:
+            result["taxes"][tax] = float(tax_match.group(1))
+
+    # Invoice number
+    invoice_number_match = re.search(r"invoice number is (\d+)", command, re.IGNORECASE)
+    if invoice_number_match:
+        result["invoice_number"] = invoice_number_match.group(1)
+
+    # Invoice date
+    parsed_dates = search_dates(command)
+    if parsed_dates:
+        result["invoice_date"] = parsed_dates[0][1].date().isoformat()
+    else:
+        result["invoice_date"] = datetime.today().date().isoformat()
+
+    # Vendor (fallback: first word after 'from' or use category keyword)
+    from_match = re.search(r"from ([A-Za-z0-9 &]+)", command, re.IGNORECASE)
+    if from_match:
+        result["vendor"] = from_match.group(1).strip()
+    elif result["category"]:
+        result["vendor"] = result["category"].split()[0]
+    else:
+        result["vendor"] = "Unknown"
+
+    # Description summary
+    result["description"] = f"{result['category']}"
+
+    return result
