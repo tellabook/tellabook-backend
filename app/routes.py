@@ -69,3 +69,35 @@ def log_command():
     db.session.commit()
 
     return jsonify({"message": "Command logged", "id": log.id}), 201
+
+from app.parser import parse_invoice_command
+
+# POST /parse-and-stage — natural language invoice logging
+@bp.route("/parse-and-stage", methods=["POST"])
+def parse_and_stage():
+    data = request.json
+    command = data.get("input_text")
+
+    if not command:
+        return jsonify({"error": "Missing input_text"}), 400
+
+    parsed = parse_invoice_command(command)
+
+    invoice = Invoice(
+        vendor=parsed.get("vendor"),
+        amount=parsed.get("amount"),
+        category=parsed.get("category"),
+        invoice_date=parsed.get("invoice_date"),
+        description=parsed.get("description"),
+        status="staged"
+    )
+
+    db.session.add(invoice)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Invoice parsed and staged",
+        "invoice_id": invoice.id,
+        "parsed_data": parsed
+    }), 201
+
