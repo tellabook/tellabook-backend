@@ -1,83 +1,86 @@
 import re
-from datetime import datetime
-import dateparser
+from datetime import date
+from dateparser.search import search_dates
 
-def parse_invoice(input_text):
-    result = {
-        "amount": None,
-        "category": None,
-        "description": None,
-        "invoice_date": None,
-        "status": "staged",
-        "vendor": None,
-        "taxes": {},
-        "invoice_number": None
-    }
+# === CATEGORY & VENDOR HINTS ===
+CATEGORY_KEYWORDS = {
+    "Internet": ["telus", "shaw", "rogers", "internet"],
+    "Phone": ["bell", "fido", "rogers", "phone", "mobility"],
+    "Insurance": ["insurance", "aviva", "intact", "policy"],
+    "Fuel": ["fuel", "gas", "diesel", "petro", "esso", "shell"],
+    "Lease Expense": ["lease", "leasing", "rent"],
+    "Office Supplies": ["staples", "office", "supplies", "stationery"],
+    "Meals & Entertainment": ["restaurant", "meal", "dinner", "lunch", "coffee", "entertainment"],
+    "Software": ["microsoft", "adobe", "software", "saas", "subscription", "quickbooks"],
+    "Repairs & Maintenance": ["repair", "maintenance", "service", "fix"],
+    "Professional Fees": ["lawyer", "accountant", "consulting", "bookkeeping", "legal"],
+    "Advertising": ["marketing", "ad", "advertising", "promotion"],
+    "Bank Charges": ["bank", "interest", "charge", "fee"],
+    "Travel": ["flight", "hotel", "uber", "airbnb", "taxi", "car rental"]
+}
 
-    # Extract amount
-    amount_match = re.search(r"\$?(\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{2})?", input_text)
-    if amount_match:
-        amount = float(amount_match.group().replace('$', '').replace(',', ''))
-        result["amount"] = amount
+def infer_category(text):
+    text_lower = text.lower()
+    for category, keywords in CATEGORY_KEYWORDS.items():
+        if any(keyword in text_lower for keyword in keywords):
+            return category
+    return "Uncategorized"
 
-    # Extract vendor
-    vendor_match = re.search(r"for\s+([A-Za-z0-9 &\-]+?)(?:\s+from|\s+on|\s+dated|\s+due|\s+starting|,|$)", input_text, re.IGNORECASE)
-    if vendor_match:
-        result["vendor"] = vendor_match.group(1).strip().title()
+def extract_vendor(text):
+    words = re.findall(r'\b[A-Z][a-zA-Z]+\b', text)
+    common_exclude = {"Record", "Invoice", "Amount", "From", "For", "The", "And"}
+    for word in words:
+        if word not in common_exclude:
+            return word
+    return "Unknown"
 
-    # Extract invoice number
-    invoice_number_match = re.search(r"(?:invoice\s*(?:number)?\s*(?:is)?\s*#?\s*)(\d+)", input_text, re.IGNORECASE)
-    if invoice_number_match:
-        result["invoice_number"] = invoice_number_match.group(1)
+def extract_amount(text):
+    match = re.search(r"\$?([0-9,]+\.?\d{0,2})", text)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    return 0.0
 
-    # Extract date
-    date_match = dateparser.search.search_dates(input_text)
-    if date_match:
-        result["invoice_date"] = date_match[0][1].date().isoformat()
-    else:
-        result["invoice_date"] = datetime.today().date().isoformat()
+def extract_invoice_number(text):
+    match = re.search(r"invoice number is (\d+)", text.lower())
+    return match.group(1) if match else None
 
-    # Extract taxes
-    tax_keywords = {
-        "GST": r"\$([\d,]+(?:\.\d{2})?)\s*GST",
-        "PST": r"\$([\d,]+(?:\.\d{2})?)\s*PST",
-        "HST": r"\$([\d,]+(?:\.\d{2})?)\s*HST",
-        "QST": r"\$([\d,]+(?:\.\d{2})?)\s*QST"
-    }
-    for tax_type, pattern in tax_keywords.items():
-        match = re.search(pattern, input_text, re.IGNORECASE)
+def extract_taxes(text):
+    taxes = {}
+    for tax in ["GST", "PST", "HST", "QST"]:
+        match = re.search(rf"\$?([0-9,]+\.?\d{{0,2}})\s*{tax}", text, re.IGNORECASE)
         if match:
-            result["taxes"][tax_type] = float(match.group(1).replace(',', ''))
+            amount = float(match.group(1).replace(",", ""))
+            taxes[tax.upper()] = amount
+    return taxes if taxes else None
 
-    # Guess category from keywords
-    keywords_to_categories = {
-        "internet": "Internet",
-        "lease": "Lease Expense",
-        "rent": "Lease Expense",
-        "payroll": "Payroll",
-        "software": "Software",
-        "equipment": "Equipment Purchase",
-        "truck": "Vehicle Expense",
-        "fuel": "Fuel",
-        "advertising": "Advertising",
-        "consulting": "Professional Fees"
+def extract_date(text):
+    found = search_dates(text, settings={"PREFER_DATES_FROM": "past"})
+    if found:
+        # Return the first matched date
+        return found[0][1].date().isoformat()
+    return date.today().isoformat()
+
+def summarize_description(text):
+    summary = text.lower()
+    if "lease" in summary and "truck" in summary:
+        return "Truck lease payment"
+    elif "internet" in summary:
+        return "Internet bill"
+    elif "insurance" in summary:
+        return "Insurance expense"
+    elif "gst" in summary or "pst" in summary:
+        return "Expense with sales taxes"
+    return "Business expense"
+
+# === MAIN PARSER FUNCTION ===
+def parse_invoice_command(text):
+    return {
+        "amount": extract_amount(text),
+        "category": infer_category(text),
+        "vendor": extract_vendor(text),
+        "invoice_date": extract_date(text),
+        "invoice_number": extract_invoice_number(text),
+        "description": summarize_description(text),
+        "taxes": extract_taxes(text),
+        "status": "staged"
     }
-    for word, category in keywords_to_categories.items():
-        if re.search(rf"\b{word}\b", input_text, re.IGNORECASE):
-            result["category"] = category
-            break
-
-    # Description summary
-    summary_parts = []
-    if result["amount"]:
-        summary_parts.append(f"${result['amount']:.2f}")
-    if result["vendor"]:
-        summary_parts.append(f"to {result['vendor']}")
-    if result["category"]:
-        summary_parts.append(f"for {result['category']}")
-    if result["invoice_date"]:
-        summary_parts.append(f"on {result['invoice_date']}")
-
-    result["description"] = " ".join(summary_parts)
-
-    return result
