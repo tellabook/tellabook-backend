@@ -1,10 +1,9 @@
 from flask import Blueprint, request, jsonify
 from app.models import db, Invoice, UserCommandHistory
-from app.parser import parse_invoice
+from app.parser import parse_invoice_command
 
 bp = Blueprint("api", __name__)
 
-# === POST /invoices — Stage a new invoice ===
 @bp.route("/invoices", methods=["POST"])
 def create_invoice():
     data = request.json
@@ -14,7 +13,6 @@ def create_invoice():
         amount=data.get("amount"),
         category=data.get("category"),
         invoice_date=data.get("invoice_date"),
-        invoice_number=data.get("invoice_number"),
         description=data.get("description"),
         status="staged"
     )
@@ -24,7 +22,7 @@ def create_invoice():
 
     return jsonify({"message": "Invoice staged", "invoice_id": invoice.id}), 201
 
-# === GET /invoices/staged — Get all staged invoices ===
+
 @bp.route("/invoices/staged", methods=["GET"])
 def get_staged_invoices():
     invoices = Invoice.query.filter_by(status="staged").all()
@@ -35,14 +33,15 @@ def get_staged_invoices():
         "amount": i.amount,
         "category": i.category,
         "invoice_date": i.invoice_date.isoformat() if i.invoice_date else None,
-        "invoice_number": i.invoice_number,
         "description": i.description,
+        "invoice_number": i.invoice_number,
+        "taxes": i.taxes,
         "status": i.status
     } for i in invoices]
 
     return jsonify(results), 200
 
-# === PATCH /invoices/<id>/confirm — Mark an invoice as confirmed ===
+
 @bp.route("/invoices/<int:invoice_id>/confirm", methods=["PATCH"])
 def confirm_invoice(invoice_id):
     invoice = Invoice.query.get(invoice_id)
@@ -55,7 +54,7 @@ def confirm_invoice(invoice_id):
 
     return jsonify({"message": f"Invoice {invoice_id} confirmed"}), 200
 
-# === POST /commands/log — Save what the user said & AI responded ===
+
 @bp.route("/commands/log", methods=["POST"])
 def log_command():
     data = request.json
@@ -70,7 +69,7 @@ def log_command():
 
     return jsonify({"message": "Command logged", "id": log.id}), 201
 
-# === POST /parse-and-stage — Parse and stage invoice from input_text ===
+
 @bp.route("/parse-and-stage", methods=["POST"])
 def parse_and_stage():
     data = request.json
@@ -79,15 +78,16 @@ def parse_and_stage():
     if not command:
         return jsonify({"error": "Missing input_text"}), 400
 
-    parsed = parse_invoice(command)
+    parsed = parse_invoice_command(command)
 
     invoice = Invoice(
         vendor=parsed.get("vendor"),
         amount=parsed.get("amount"),
         category=parsed.get("category"),
         invoice_date=parsed.get("invoice_date"),
-        invoice_number=parsed.get("invoice_number"),
         description=parsed.get("description"),
+        invoice_number=parsed.get("invoice_number"),
+        taxes=parsed.get("taxes"),
         status="staged"
     )
 
