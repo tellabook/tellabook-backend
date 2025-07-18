@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-import dateparser
+from dateparser.search import search_dates
 
 def parse_invoice(text):
     result = {}
@@ -32,7 +32,7 @@ def parse_invoice(text):
         result["taxes"] = taxes
 
     # Extract date
-    date = dateparser.search.search_dates(text)
+    date = search_dates(text)
     if date:
         result["invoice_date"] = date[0][1].date().isoformat()
     else:
