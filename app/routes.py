@@ -70,7 +70,7 @@ def log_command():
 
     return jsonify({"message": "Command logged", "id": log.id}), 201
 
-from app.parser import parse_invoice_command
+from app.parser import parse_invoice
 
 # POST /parse-and-stage — natural language invoice logging
 @bp.route("/parse-and-stage", methods=["POST"])
