@@ -15,6 +15,7 @@ class Invoice(db.Model):
     amount = db.Column(db.Float, nullable=False)
     category = db.Column(db.String(80), nullable=True)
     invoice_date = db.Column(db.Date, nullable=True)
+    invoice_number = db.Column(db.String, nullable=True)
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default="staged")  # staged, confirmed, posted
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
