@@ -1,45 +1,51 @@
+from datetime import date
 import re
-from datetime import datetime
-from dateparser.search import search_dates
+from dateparser import parse as parse_date
 
 
-def parse_invoice(input_text):
-    result = {
-        "amount": None,
-        "category": "Lease Expense",
-        "description": "",
-        "invoice_date": None,
-        "invoice_number": None,
-        "status": "staged",
-        "taxes": [],
-        "vendor": None
-    }
+def parse_invoice(text):
+    vendor = None
+    amount = None
+    category = None
+    invoice_date = None
+    invoice_number = None
+    description = ""
 
-    result["description"] = summarize_description(input_text)
-
-    amount_match = re.search(r"\$([\d,]+\.?\d*)", input_text)
+    # Extract amount
+    amount_match = re.search(r"\$([\d,]+\.\d{2})", text)
     if amount_match:
-        result["amount"] = float(amount_match.group(1).replace(",", ""))
+        amount = float(amount_match.group(1).replace(",", ""))
 
-    invoice_match = re.search(r"invoice number is (\d+)", input_text, re.IGNORECASE)
-    if invoice_match:
-        result["invoice_number"] = invoice_match.group(1)
+    # Extract invoice number
+    invoice_number_match = re.search(r"(invoice\s*#?\s*|number\s*:?)[#\s]*(\d+)", text, re.IGNORECASE)
+    if invoice_number_match:
+        invoice_number = invoice_number_match.group(2)
 
-    tax_matches = re.findall(r"\$(\d+(?:\.\d{1,2})?)\s+(GST|PST|HST|QST)", input_text, re.IGNORECASE)
-    for value, tax_type in tax_matches:
-        result["taxes"].append({tax_type.upper(): float(value)})
+    # Extract date
+    date_match = parse_date(text, settings={'PREFER_DATES_FROM': 'past'})
+    invoice_date = date_match.date() if date_match else date.today()
 
-    dates = search_dates(input_text)
-    if dates:
-        result["invoice_date"] = dates[0][1].date().isoformat()
-    else:
-        result["invoice_date"] = datetime.today().date().isoformat()
+    # Guess category
+    if "lease" in text.lower() or "rent" in text.lower():
+        category = "Lease Expense"
+    elif "fuel" in text.lower():
+        category = "Fuel"
+    elif "repair" in text.lower() or "maintenance" in text.lower():
+        category = "Repairs and Maintenance"
 
-    vendor_match = re.search(r"from ([A-Z][a-z]+ \d{1,2})", input_text)
+    # Vendor name guess (simple heuristic for now)
+    vendor_match = re.search(r"from\s+([\w\s&]+)", text, re.IGNORECASE)
     if vendor_match:
-        result["vendor"] = vendor_match.group(1)
+        vendor = vendor_match.group(1).strip()
 
-    return result
+    # Default description as a summary
+    description = f"Record {amount if amount else 'unknown'} expense from {vendor or 'unknown vendor'} on {invoice_date}"
 
-def summarize_description(text):
-    return " ".join(text.strip().split()[:7]) + "..."
+    return {
+        "vendor": vendor,
+        "amount": amount,
+        "category": category,
+        "invoice_date": invoice_date,
+        "invoice_number": invoice_number,
+        "description": description
+    }
