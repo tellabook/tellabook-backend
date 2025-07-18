@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import os
+from sqlalchemy.dialects.postgresql import JSON
 
 # Initialize DB object
 db = SQLAlchemy()
@@ -19,6 +20,7 @@ class Invoice(db.Model):
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default="staged")  # staged, confirmed, posted
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    taxes = db.Column(JSON, nullable=True)  # ✅ Added taxes as JSON field
 
 class UserCommandHistory(db.Model):
     __tablename__ = 'user_command_history'
