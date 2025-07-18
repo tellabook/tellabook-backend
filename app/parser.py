@@ -1,67 +1,68 @@
-# === parser.py ===
 import re
 from datetime import datetime
-from dateparser.search import search_dates
+import dateparser
 
-def parse_invoice_command(command: str) -> dict:
-    result = {
-        "amount": None,
-        "category": None,
-        "invoice_date": None,
-        "invoice_number": None,
-        "description": None,
-        "vendor": None,
-        "taxes": {},
-    }
+def parse_invoice(text):
+    result = {}
 
-    # Amount
-    amount_match = re.search(r"\$?([\d,]+\.\d{2}|\d+)", command)
+    # Extract amount
+    amount_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)", text)
     if amount_match:
         result["amount"] = float(amount_match.group(1).replace(",", ""))
-
-    # Category inference
-    if "lease" in command.lower() and "truck" in command.lower():
-        result["category"] = "Truck lease payment"
-    elif "lease" in command.lower():
-        result["category"] = "Lease Expense"
-    elif "rent" in command.lower():
-        result["category"] = "Rent Expense"
-    elif "software" in command.lower():
-        result["category"] = "Software"
-    elif "consulting" in command.lower():
-        result["category"] = "Consulting Expense"
     else:
-        result["category"] = "General Expense"
+        result["amount"] = 0.0
 
-    # Taxes (GST, PST, HST, QST)
-    tax_types = ["GST", "PST", "HST", "QST"]
-    for tax in tax_types:
-        tax_match = re.search(rf"\$([\d\.]+)\s*{tax}", command, re.IGNORECASE)
-        if tax_match:
-            result["taxes"][tax] = float(tax_match.group(1))
+    # Extract GST and PST or HST/QST if available
+    taxes = {}
+    gst_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)\s*GST", text, re.IGNORECASE)
+    pst_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)\s*PST", text, re.IGNORECASE)
+    hst_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)\s*HST", text, re.IGNORECASE)
+    qst_match = re.search(r"\$?([\d,]+(?:\.\d{1,2})?)\s*QST", text, re.IGNORECASE)
 
-    # Invoice number
-    invoice_number_match = re.search(r"invoice number is (\d+)", command, re.IGNORECASE)
+    if gst_match:
+        taxes["GST"] = float(gst_match.group(1).replace(",", ""))
+    if pst_match:
+        taxes["PST"] = float(pst_match.group(1).replace(",", ""))
+    if hst_match:
+        taxes["HST"] = float(hst_match.group(1).replace(",", ""))
+    if qst_match:
+        taxes["QST"] = float(qst_match.group(1).replace(",", ""))
+
+    if taxes:
+        result["taxes"] = taxes
+
+    # Extract date using dateparser
+    date = dateparser.search.search_dates(text)
+    if date:
+        result["invoice_date"] = date[0][1].date().isoformat()
+    else:
+        result["invoice_date"] = datetime.now().date().isoformat()
+
+    # Extract invoice number
+    invoice_number_match = re.search(r"invoice\s+(?:#|number)?\s*(\d+)", text, re.IGNORECASE)
     if invoice_number_match:
         result["invoice_number"] = invoice_number_match.group(1)
 
-    # Invoice date
-    parsed_dates = search_dates(command)
-    if parsed_dates:
-        result["invoice_date"] = parsed_dates[0][1].date().isoformat()
+    # Heuristic category
+    if "lease" in text.lower():
+        result["category"] = "Lease Expense"
+    elif "truck" in text.lower():
+        result["category"] = "Truck Expense"
+    elif "repair" in text.lower():
+        result["category"] = "Repairs & Maintenance"
+    elif "legal" in text.lower():
+        result["category"] = "Legal & Professional"
     else:
-        result["invoice_date"] = datetime.today().date().isoformat()
+        result["category"] = "General Expense"
 
-    # Vendor (fallback: first word after 'from' or use category keyword)
-    from_match = re.search(r"from ([A-Za-z0-9 &]+)", command, re.IGNORECASE)
-    if from_match:
-        result["vendor"] = from_match.group(1).strip()
-    elif result["category"]:
-        result["vendor"] = result["category"].split()[0]
-    else:
-        result["vendor"] = "Unknown"
+    # Vendor = month name or placeholder
+    months = [
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december"
+    ]
+    result["vendor"] = next((m.capitalize() for m in months if m in text.lower()), "Unknown Vendor")
 
-    # Description summary
-    result["description"] = f"{result['category']}"
+    # Description is a clean summary, not verbatim
+    result["description"] = f"{result['category']} for {result['vendor']}"
 
     return result
