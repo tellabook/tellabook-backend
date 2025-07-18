@@ -2,7 +2,7 @@ import re
 from dateparser import parse as parse_date
 from datetime import datetime
 
-# Define keyword to category mapping
+# Keyword mappings
 CATEGORY_KEYWORDS = {
     "lease": "Lease Expense",
     "rent": "Rent",
@@ -15,12 +15,12 @@ CATEGORY_KEYWORDS = {
     "utilities": "Utilities"
 }
 
-# Default tax rates by province (used only if you later want to force estimation mode)
-DEFAULT_TAX_RATES = {
-    "GST": 0.05,
-    "PST": 0.07,
-    "HST": 0.13,
-    "QST": 0.09975
+# Tax patterns to extract exact tax types
+TAX_PATTERNS = {
+    "GST": r"\$?([\d,]+\.\d{1,2}|\d+)\s*GST",
+    "PST": r"\$?([\d,]+\.\d{1,2}|\d+)\s*PST",
+    "HST": r"\$?([\d,]+\.\d{1,2}|\d+)\s*HST",
+    "QST": r"\$?([\d,]+\.\d{1,2}|\d+)\s*QST"
 }
 
 def extract_amount(text):
@@ -33,10 +33,10 @@ def extract_date(text):
     dt = parse_date(text, settings={"PREFER_DATES_FROM": "past"})
     if dt:
         return dt.date().isoformat()
-    return None
+    return datetime.today().date().isoformat()  # Default to today
 
 def extract_vendor(text):
-    for key in CATEGORY_KEYWORDS.keys():
+    for key in CATEGORY_KEYWORDS:
         if key.lower() in text.lower():
             return key.capitalize()
 
@@ -54,29 +54,20 @@ def extract_category(text):
 
 def extract_taxes(text):
     taxes = {}
-    for tax in ["GST", "PST", "HST", "QST"]:
-        match = re.search(rf"\$([\d,]+(?:\.\d{{1,2}})?)\s*{tax}", text, re.IGNORECASE)
+    for tax_type, pattern in TAX_PATTERNS.items():
+        match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            taxes[tax] = float(match.group(1).replace(",", ""))
-    return taxes
+            amount = float(match.group(1).replace(",", ""))
+            taxes[tax_type] = amount
+    return taxes if taxes else None
 
 def parse_invoice_command(text):
-    subtotal = extract_amount(text)
-    vendor = extract_vendor(text)
-    category = extract_category(text)
-    invoice_date = extract_date(text)
-    taxes = extract_taxes(text)
-
-    parsed = {
-        "amount": subtotal,
-        "vendor": vendor,
-        "category": category,
-        "invoice_date": invoice_date,
+    return {
+        "amount": extract_amount(text),
+        "vendor": extract_vendor(text),
+        "category": extract_category(text),
+        "invoice_date": extract_date(text),
+        "taxes": extract_taxes(text),
         "description": text,
         "status": "staged"
     }
-
-    if taxes:
-        parsed["taxes"] = taxes
-
-    return parsed
